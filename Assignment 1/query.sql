@@ -148,3 +148,22 @@ where season.season_id = left_handed_batsmen_ranked.season_id and
 left_handed_batsmen_ranked.rank <= 5
 order by season.season_year, rank
 ;
+
+-- 7 --
+with match_winner(match_id, winner) as (
+    select match.match_id, match.match_winner from 
+    match, 
+    season,
+    outcome
+    where match.season_id = season.season_id and
+    season.season_year = 2009 and 
+    outcome.outcome_id = match.outcome_id and
+    outcome.outcome_type != 'No Result'
+) 
+select team.team_name from 
+match_winner,
+team
+where match_winner.winner = team.team_id
+group by match_winner.winner, team.team_name
+order by count(*) DESC, team.team_name;
+;
