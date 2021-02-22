@@ -57,7 +57,7 @@ with catches(player_id, num_catches) as (
     out_type.out_name = 'caught'
     group by wicket_taken.fielders
 )
-select player.player_name, catches.num_catches from 
+select player.player_name from 
 catches, 
 player
 where catches.player_id = player.player_id 
@@ -84,3 +84,67 @@ season.purple_cap = player.player_id
 order by season.season_year
 ;
 
+-- 5 --
+with runs_scored(match_id, player_id, runs_scored) as (
+    select batsman_scored.match_id, ball_by_ball.striker, sum(batsman_scored.runs_scored) as runs_scored from
+    batsman_scored,
+    ball_by_ball
+    where batsman_scored.match_id = ball_by_ball.match_id and
+    batsman_scored.over_id = ball_by_ball.over_id and
+    batsman_scored.ball_id = ball_by_ball.ball_id and
+    batsman_scored.innings_no = ball_by_ball.innings_no
+    group by batsman_scored.match_id, ball_by_ball.striker
+),
+losing_team(match_id, losing_team) as (
+    select match.match_id,
+    case 
+    when match.match_winner = match.team_1 then match.team_2 
+    else match.team_1 END 
+    as losing_team from 
+    match, outcome
+    where match.outcome_id = outcome.outcome_id and
+    outcome.outcome_type != 'No Result'
+) 
+select distinct player.player_name from 
+losing_team,
+runs_scored,
+player_match,
+player
+where runs_scored.match_id = losing_team.match_id and
+runs_scored.match_id = player_match.match_id and
+runs_scored.player_id = player_match.player_id and
+runs_scored.player_id = player.player_id and
+player_match.team_id = losing_team.losing_team and 
+runs_scored.runs_scored > 50
+order by player.player_name
+;
+
+-- 6 --
+with left_handed_batsmen(season_id, team_id, team_name, player_id) as (
+    select distinct match.season_id, player_match.team_id, team.team_name, player_match.player_id from
+    player_match,
+    player,
+    batting_style,
+    country,
+    match,
+    team
+    where player_match.player_id = player.player_id and
+    player.batting_hand = batting_style.batting_id and
+    batting_style.batting_hand = 'Left-hand bat' and
+    player.country_id = country.country_id and
+    country.country_name != 'India' and 
+    player_match.match_id = match.match_id and
+    team.team_id = player_match.team_id
+), 
+left_handed_batsmen_ranked(season_id, team_id, team_name, rank) as (
+    select season_id, team_id, team_name, rank() over (partition by season_id order by count(*) DESC, team_name) from
+    left_handed_batsmen
+    group by season_id, team_id, team_name
+)
+select season.season_year, left_handed_batsmen_ranked.team_name, left_handed_batsmen_ranked.rank from 
+left_handed_batsmen_ranked,
+season
+where season.season_id = left_handed_batsmen_ranked.season_id and
+left_handed_batsmen_ranked.rank <= 5
+order by season.season_year, rank
+;
