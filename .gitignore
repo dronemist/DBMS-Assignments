@@ -1,2 +1,8 @@
 # Ignore Mac files
 .DS_Store
+
+# Assignment 1
+Assignment 1/db_build.sql
+Assignment 1/drop.sql
+Assignment 1/example.sql
+Assignment 1/IPL DB/
