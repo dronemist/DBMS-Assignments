@@ -526,3 +526,87 @@ where team.team_id = temp.team_id and
 temp.rank = 1
 order by team.team_name
 ;
+
+-- 18 --
+with run_conceded(match_id, over_id, innings_no, player_id, runs) as (
+    select batsman_scored.match_id, ball_by_ball.over_id, ball_by_ball.innings_no, ball_by_ball.bowler, sum(batsman_scored.runs_scored) as runs
+    from batsman_scored, ball_by_ball
+    where batsman_scored.match_id = ball_by_ball.match_id and
+    batsman_scored.over_id = ball_by_ball.over_id and
+    batsman_scored.ball_id = ball_by_ball.ball_id and
+    batsman_scored.innings_no = ball_by_ball.innings_no and
+    batsman_scored.innings_no <= 2
+    group by batsman_scored.match_id, ball_by_ball.bowler, ball_by_ball.over_id, ball_by_ball.innings_no
+),
+matches_played(team_id, player_id, num_matches) as (
+    select player_match.team_id, player_match.player_id, count(*) as num_matches from
+    player_match
+    group by player_match.team_id, player_match.player_id
+),
+num_teams(player_id, num_teams) as (
+    select matches_played.player_id, count(*) as num_teams
+    from matches_played
+    group by player_id
+),
+num_run_conceded(player_id, num) as (
+    select player_id, count(*) as num
+    from run_conceded
+    where runs > 20
+    group by player_id
+)
+select player_name from (
+    select player.player_name, num_run_conceded.num, num_teams.num_teams,
+    rank() over (order by num_run_conceded.num desc, player.player_name) as rank
+    from player, num_run_conceded, num_teams
+    where player.player_id = num_run_conceded.player_id and
+    player.player_id = num_teams.player_id and
+    num_teams.num_teams >= 3
+) temp
+where rank <= 5
+order by rank;
+
+-- 19 --
+with runs_scored(match_id, team_id, runs_scored) as (
+    select batsman_scored.match_id, player_match.team_id, sum(batsman_scored.runs_scored) as runs_scored from
+    batsman_scored,
+    ball_by_ball,
+    player_match
+    where batsman_scored.match_id = ball_by_ball.match_id and
+    batsman_scored.over_id = ball_by_ball.over_id and
+    batsman_scored.ball_id = ball_by_ball.ball_id and
+    batsman_scored.innings_no = ball_by_ball.innings_no and
+    ball_by_ball.innings_no <= 2 and
+    player_match.match_id = batsman_scored.match_id and
+    player_match.player_id = ball_by_ball.striker
+    group by batsman_scored.match_id, player_match.team_id
+),
+average_runs(team_id, average) as (
+    select team_id, round(avg(runs_scored), 2) as average from
+    runs_scored, match, season
+    where runs_scored.match_id = match.match_id and
+    match.season_id = season.season_id and
+    season.season_year = 2010
+    group by team_id
+)
+select team.team_name, average_runs.average from
+team, average_runs
+where team.team_id = average_runs.team_id
+order by team.team_name;
+
+-- 20 --
+with num_out(player_id, num) as (
+    select wicket_taken.player_out, count(*) as num
+    from wicket_taken
+    where wicket_taken.over_id <= 1 and
+    wicket_taken.innings_no <= 2
+    group by wicket_taken.player_out
+)
+select player_name from (
+    select player.player_name, num_out.num,
+    rank() over(order by num_out.num desc, player.player_name) from 
+    player, num_out
+    where num_out.player_id = player.player_id
+) temp
+where rank <= 10
+order by rank
+;
