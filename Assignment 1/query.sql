@@ -168,7 +168,7 @@ group by match_winner.winner, team.team_name
 order by count(*) DESC, team.team_name;
 ;
 
-8 --
+-- 8 --
 with runs_scored(match_id, player_id, runs_scored) as (
     select batsman_scored.match_id, ball_by_ball.striker, sum(batsman_scored.runs_scored) as runs_scored from
     batsman_scored,
@@ -205,7 +205,7 @@ where t.rank = 1
 order by team_name
 ;
 
-9 --
+-- 9 --
 with num_sixes(match_id, team_id, innings_no, sixes) as (
     select batsman_scored.match_id, ball_by_ball.team_batting, ball_by_ball.innings_no, 
     sum(case when batsman_scored.runs_scored = 6 then 1 else 0 end) as sixes from
