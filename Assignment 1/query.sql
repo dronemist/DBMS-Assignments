@@ -480,3 +480,49 @@ t1.rank = 2 and
 t2.rank = 2
 order by t1.season_id
 ;
+
+-- 16 --
+with result(match_id, winner, loser) as (
+    select match.match_id, match.match_winner as winner, (
+        case when match.match_winner = match.team_1 then match.team_2
+        else match.team_1
+        end
+    ) as loser
+    from match, outcome
+    where match.outcome_id = outcome.outcome_id and
+    outcome.outcome_type != 'No Result'
+), 
+matches_won(team_id, num_matches) as (
+    select result.winner, count(*) as num_matches
+    from result, season, match, team
+    where result.match_id = match.match_id and
+    season.season_id = match.season_id and
+    season.season_year = 2008 and 
+    result.loser = team.team_id and
+    team.team_name = 'Royal Challengers Bangalore'
+    group by result.winner
+)
+select team.team_name
+from matches_won, team
+where matches_won.team_id = team.team_id
+order by matches_won.num_matches desc, team.team_name
+;
+
+-- 17 --
+with num_mom(team_id, player_id, num_awards) as (
+    select player_match.team_id, player_match.player_id, count(*) as num_awards from
+    player_match, match
+    where player_match.match_id = match.match_id and
+    player_match.player_id = match.man_of_the_match
+    group by player_match.team_id, player_match.player_id
+)
+select team.team_name, temp.player_name, temp.num_awards as count  from (
+    select num_mom.team_id, player.player_name, num_mom.num_awards, 
+    rank() over(partition by num_mom.team_id order by num_mom.num_awards desc, player.player_name) as rank 
+    from num_mom, player
+    where player.player_id = num_mom.player_id
+) temp, team
+where team.team_id = temp.team_id and
+temp.rank = 1
+order by team.team_name
+;
