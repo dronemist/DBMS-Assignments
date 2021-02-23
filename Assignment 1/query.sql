@@ -86,7 +86,7 @@ season.purple_cap = player.player_id
 order by season.season_year
 ;
 
-5 --
+-- 5 --
 with runs_scored(match_id, player_id, runs_scored) as (
     select batsman_scored.match_id, ball_by_ball.striker, sum(batsman_scored.runs_scored) as runs_scored from
     batsman_scored,
@@ -242,6 +242,7 @@ select team_name, opponent_team_name, sixes from (
     )
 ) temp 
 where rank <= 3
+order by rank
 ;
 
 -- 10 --
@@ -350,3 +351,132 @@ matches_played.num_matches >= 10
 order by num_wickets.num_wickets desc, runs_scored.runs_scored desc, player.player_name 
 
 -- 12 --
+with num_wickets(match_id, player_id, num_wickets) as (
+    select ball_by_ball.match_id, ball_by_ball.bowler as player_id, Count(*) as num_wickets from
+        (select * from wicket_taken, out_type
+        where wicket_taken.kind_out = out_type.out_id and (
+        out_type.out_name NOT IN ('run out', 'retired hurt', 'obstructing the field'))
+        ) AS bowlers_wickets, 
+        ball_by_ball
+    where ball_by_ball.match_id = bowlers_wickets.match_id and
+        ball_by_ball.over_id = bowlers_wickets.over_id and
+        ball_by_ball.ball_id = bowlers_wickets.ball_id and
+        ball_by_ball.innings_no = bowlers_wickets.innings_no and
+        ball_by_ball.innings_no <= 2
+    group by ball_by_ball.match_id, ball_by_ball.bowler
+)
+select match_id, player_name, team_name, num_wickets, season_year from (
+    select match.match_id, player.player_name, team.team_name, num_wickets.num_wickets, season.season_year,
+    rank() over (order by num_wickets desc, player.player_name, match.match_id) as rank from
+    match, player, num_wickets, season, team, player_match
+    where match.match_id = num_wickets.match_id and
+    player.player_id = num_wickets.player_id and
+    player_match.player_id = num_wickets.player_id and
+    player_match.match_id = num_wickets.match_id and
+    player_match.team_id = team.team_id and
+    match.season_id = season.season_id
+) temp 
+where rank = 1
+;
+
+-- 13 --
+with matches_played(season_id, player_id, num_matches) as (
+    select match.season_id, player_match.player_id, count(*) as matches_played from
+    player_match,
+    match
+    where player_match.match_id = match.match_id
+    group by match.season_id, player_match.player_id
+),
+seasons_played(player_id, seasons_played) as (
+    select player_id, count(*) as seasons_played from 
+    matches_played
+    group by player_id
+)
+select player.player_name from 
+seasons_played, player
+where player.player_id = seasons_played.player_id and
+seasons_played.seasons_played = (select count(*) from season)
+order by player.player_name 
+
+-- 14 --
+with runs_scored(match_id, player_id, runs_scored) as (
+    select batsman_scored.match_id, ball_by_ball.striker, sum(batsman_scored.runs_scored) as runs_scored from
+    batsman_scored,
+    ball_by_ball
+    where batsman_scored.match_id = ball_by_ball.match_id and
+    batsman_scored.over_id = ball_by_ball.over_id and
+    batsman_scored.ball_id = ball_by_ball.ball_id and
+    batsman_scored.innings_no = ball_by_ball.innings_no and
+    ball_by_ball.innings_no <= 2
+    group by batsman_scored.match_id, ball_by_ball.striker
+),
+most_fifty_winning(match_id, team_id, num_fifty) as (
+    select runs_scored.match_id, player_match.team_id, count(*) as num_fifty from
+    runs_scored, player_match, match
+    where runs_scored.player_id = player_match.player_id and
+    runs_scored.match_id = player_match.match_id and
+    runs_scored.runs_scored >= 50 and
+    match.match_id = player_match.match_id and
+    match.match_winner = player_match.team_id
+    group by runs_scored.match_id, player_match.team_id
+)
+select season_year, match_id, team_name from (
+    select season.season_year, most_fifty_winning.match_id, team.team_name,
+    rank() over(partition by season.season_id order by most_fifty_winning.num_fifty desc, team.team_name) as rank
+    from season, most_fifty_winning, team, match
+    where match.match_id = most_fifty_winning.match_id and
+    most_fifty_winning.team_id = team.team_id and
+    season.season_id = match.season_id 
+) temp
+where rank <= 3
+order by season_year, rank;
+
+-- 15 --
+with num_wickets(season_id, player_id, num_wickets) as (
+    select match.season_id, ball_by_ball.bowler as player_id, Count(*) as num_wickets from
+        (select * from wicket_taken, out_type
+        where wicket_taken.kind_out = out_type.out_id and (
+        out_type.out_name NOT IN ('run out', 'retired hurt', 'obstructing the field'))
+        ) AS bowlers_wickets, 
+        ball_by_ball,
+        match
+    where ball_by_ball.match_id = bowlers_wickets.match_id and
+        ball_by_ball.over_id = bowlers_wickets.over_id and
+        ball_by_ball.ball_id = bowlers_wickets.ball_id and
+        ball_by_ball.innings_no = bowlers_wickets.innings_no and 
+        ball_by_ball.innings_no <= 2 and
+        ball_by_ball.match_id = match.match_id
+    group by match.season_id, ball_by_ball.bowler
+), 
+runs_scored(season_id, player_id, runs_scored) as (
+    select match.season_id, ball_by_ball.striker, sum(batsman_scored.runs_scored) as runs_scored from
+    batsman_scored,
+    ball_by_ball,
+    match
+    where batsman_scored.match_id = ball_by_ball.match_id and
+    batsman_scored.over_id = ball_by_ball.over_id and
+    batsman_scored.ball_id = ball_by_ball.ball_id and
+    batsman_scored.innings_no = ball_by_ball.innings_no and
+    batsman_scored.innings_no <= 2 and
+    batsman_scored.match_id = match.match_id
+    group by match.season_id, ball_by_ball.striker
+)
+select season.season_year, p2.player_name as top_batsmen, t2.runs_scored as max_runs, p1.player_name as top_bowler, t1.num_wickets as max_wickets from (
+    select num_wickets.season_id, num_wickets.player_id, num_wickets.num_wickets,
+    rank() over(partition by num_wickets.season_id order by num_wickets.num_wickets desc, player.player_name) from
+    num_wickets, player
+    where num_wickets.player_id = player.player_id
+) t1, (
+    select runs_scored.season_id, runs_scored.player_id, runs_scored.runs_scored,
+    rank() over(partition by runs_scored.season_id order by runs_scored.runs_scored desc, player.player_name) from
+    runs_scored, player
+    where runs_scored.player_id = player.player_id
+) t2, player as p1, player as p2, season 
+where t1.season_id = t2.season_id and
+season.season_id = t1.season_id and
+p2.player_id = t2.player_id and
+p1.player_id = t1.player_id and
+t1.rank = 2 and
+t2.rank = 2
+order by t1.season_id
+;
