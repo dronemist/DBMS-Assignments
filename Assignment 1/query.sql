@@ -238,3 +238,104 @@ select team_name, opponent_team_name, sixes from (
 ) temp 
 where rank <= 3
 ;
+
+-- 10 --
+with num_wickets(player_id, num_wickets) as (
+    select ball_by_ball.bowler as player_id, Count(*) as num_wickets from
+        (select * from wicket_taken, out_type
+        where wicket_taken.kind_out = out_type.out_id and (
+        out_type.out_name NOT IN ('run out', 'retired hurt', 'obstructing the field'))
+        ) AS bowlers_wickets, 
+        ball_by_ball
+    where ball_by_ball.match_id = bowlers_wickets.match_id and
+        ball_by_ball.over_id = bowlers_wickets.over_id and
+        ball_by_ball.ball_id = bowlers_wickets.ball_id and
+        ball_by_ball.innings_no = bowlers_wickets.innings_no
+    group by ball_by_ball.bowler
+), 
+average_bowlers(bowling_id, bowling_skill, average) as (
+    select bowling_style.bowling_id, bowling_style.bowling_skill, avg(num_wickets.num_wickets) from 
+    bowling_style, 
+    num_wickets,
+    player
+    where num_wickets.player_id = player.player_id and
+    player.bowling_skill = bowling_style.bowling_id
+    group by bowling_style.bowling_id, bowling_style.bowling_skill
+), 
+runs_scored(match_id, player_id, runs_scored) as (
+    select batsman_scored.match_id, ball_by_ball.striker, sum(batsman_scored.runs_scored) as runs_scored from
+    batsman_scored,
+    ball_by_ball
+    where batsman_scored.match_id = ball_by_ball.match_id and
+    batsman_scored.over_id = ball_by_ball.over_id and
+    batsman_scored.ball_id = ball_by_ball.ball_id and
+    batsman_scored.innings_no = ball_by_ball.innings_no
+    group by batsman_scored.match_id, ball_by_ball.striker
+), 
+batting_average(player_id, average) as (
+    select player_id, avg(runs_scored) 
+    from runs_scored
+    group by player_id
+)
+select bowling_skill, player_name, batting_average from (
+    select average_bowlers.bowling_skill, player.player_name, batting_average.average as batting_average,
+    rank() over (partition by average_bowlers.bowling_id order by batting_average.average desc, player.player_name) as rank
+    from average_bowlers, player, num_wickets, batting_average
+    where player.player_id = batting_average.player_id and
+    player.player_id = num_wickets.player_id and
+    player.bowling_skill = average_bowlers.bowling_id and
+    num_wickets.num_wickets > average_bowlers.average
+) temp
+where rank = 1
+order by bowling_skill
+;
+
+-- 11 -- 
+with num_wickets(season_id, player_id, num_wickets) as (
+    select match.season_id, ball_by_ball.bowler as player_id, Count(*) as num_wickets from
+        (select * from wicket_taken, out_type
+        where wicket_taken.kind_out = out_type.out_id and (
+        out_type.out_name NOT IN ('run out', 'retired hurt', 'obstructing the field'))
+        ) AS bowlers_wickets, 
+        ball_by_ball,
+        match
+    where ball_by_ball.match_id = bowlers_wickets.match_id and
+        ball_by_ball.over_id = bowlers_wickets.over_id and
+        ball_by_ball.ball_id = bowlers_wickets.ball_id and
+        ball_by_ball.innings_no = bowlers_wickets.innings_no and 
+        ball_by_ball.match_id = match.match_id
+    group by match.season_id, ball_by_ball.bowler
+), 
+runs_scored(season_id, player_id, runs_scored) as (
+    select match.season_id, ball_by_ball.striker, sum(batsman_scored.runs_scored) as runs_scored from
+    batsman_scored,
+    ball_by_ball,
+    match
+    where batsman_scored.match_id = ball_by_ball.match_id and
+    batsman_scored.over_id = ball_by_ball.over_id and
+    batsman_scored.ball_id = ball_by_ball.ball_id and
+    batsman_scored.innings_no = ball_by_ball.innings_no and
+    batsman_scored.match_id = match.match_id
+    group by match.season_id, ball_by_ball.striker
+), 
+matches_played(season_id, player_id, num_matches) as (
+    select match.season_id, player_match.player_id, count(*) as matches_played from
+    player_match,
+    match
+    where player_match.match_id = match.match_id
+    group by match.season_id, player_match.player_id
+)
+select season.season_year, player.player_name, num_wickets.num_wickets, runs_scored.runs_scored from 
+season, player, num_wickets, matches_played, runs_scored, batting_style
+where player.player_id = matches_played.player_id and
+player.player_id = num_wickets.player_id and
+player.player_id = runs_scored.player_id  and
+season.season_id = matches_played.season_id  and
+season.season_id = runs_scored.season_id and
+season.season_id = num_wickets.season_id and
+player.batting_hand = batting_style.batting_id and
+batting_style.batting_hand = 'Left-hand bat' and
+runs_scored.runs_scored >= 150 and
+num_wickets.num_wickets >= 5 and
+matches_played.num_matches >= 10
+order by num_wickets.num_wickets desc, runs_scored.runs_scored desc, player.player_name 
