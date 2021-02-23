@@ -167,3 +167,74 @@ where match_winner.winner = team.team_id
 group by match_winner.winner, team.team_name
 order by count(*) DESC, team.team_name;
 ;
+
+8 --
+with runs_scored(match_id, player_id, runs_scored) as (
+    select batsman_scored.match_id, ball_by_ball.striker, sum(batsman_scored.runs_scored) as runs_scored from
+    batsman_scored,
+    ball_by_ball
+    where batsman_scored.match_id = ball_by_ball.match_id and
+    batsman_scored.over_id = ball_by_ball.over_id and
+    batsman_scored.ball_id = ball_by_ball.ball_id and
+    batsman_scored.innings_no = ball_by_ball.innings_no
+    group by batsman_scored.match_id, ball_by_ball.striker
+), 
+runs_scored_season(season_id, team_id, player_id, runs_scored) as (
+    select match.season_id, player_match.team_id, runs_scored.player_id, sum(runs_scored.runs_scored)
+    from runs_scored, 
+    match,
+    player_match
+    where runs_scored.match_id = match.match_id and
+    runs_scored.player_id = player_match.player_id and
+    runs_scored.match_id = player_match.match_id
+    group by match.season_id, player_match.team_id, runs_scored.player_id
+)
+select team_name, player_name, runs_scored from (
+    select team.team_name, player.player_name, runs_scored_season.runs_scored,  
+    rank() over (partition by runs_scored_season.season_id, runs_scored_season.team_id order by runs_scored_season.runs_scored DESC, player.player_name) as rank
+    from runs_scored_season,
+    team,
+    season,  
+    player
+    where runs_scored_season.player_id = player.player_id and
+    team.team_id = runs_scored_season.team_id and
+    season.season_id = runs_scored_season.season_id and
+    season.season_year = 2010
+) t 
+where t.rank = 1
+order by team_name
+;
+
+9 --
+with num_sixes(match_id, team_id, innings_no, sixes) as (
+    select batsman_scored.match_id, ball_by_ball.team_batting, ball_by_ball.innings_no, 
+    sum(case when batsman_scored.runs_scored = 6 then 1 else 0 end) as sixes from
+    batsman_scored,
+    ball_by_ball
+    where batsman_scored.match_id = ball_by_ball.match_id and
+    batsman_scored.over_id = ball_by_ball.over_id and
+    batsman_scored.ball_id = ball_by_ball.ball_id and
+    batsman_scored.innings_no = ball_by_ball.innings_no
+    group by batsman_scored.match_id, ball_by_ball.team_batting, ball_by_ball.innings_no
+)
+select team_name, opponent_team_name, sixes from (
+    select t1.team_name as team_name, t2.team_name as opponent_team_name, num_sixes.sixes, 
+    rank() over(partition by season.season_id order by num_sixes.sixes desc, t1.team_name) as rank
+    from team as t1,
+    team as t2, 
+    num_sixes,
+    match,
+    season
+    where num_sixes.team_id = t1.team_id and
+    match.match_id = num_sixes.match_id and
+    match.season_id = season.season_id and 
+    season.season_year = 2008 and
+    (
+        case 
+        when num_sixes.team_id = match.team_1 then t2.team_id = match.team_2
+        else t2.team_id = match.team_1 
+        end 
+    )
+) temp 
+where rank <= 3
+;
