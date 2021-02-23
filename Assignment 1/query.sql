@@ -11,6 +11,7 @@ select wickets.match_id, player.player_name, team.team_name, wickets.num_wickets
         ball_by_ball.over_id = bowlers_wickets.over_id and
         ball_by_ball.ball_id = bowlers_wickets.ball_id and
         ball_by_ball.innings_no = bowlers_wickets.innings_no and
+        ball_by_ball.innings_no <= 2 and
         ball_by_ball.bowler = player.player_id
     GROUP BY ball_by_ball.match_id, ball_by_ball.bowler, ball_by_ball.team_bowling
     HAVING Count(*) >= 5
@@ -52,6 +53,7 @@ with catches(player_id, num_catches) as (
     match, 
     out_type
     where wicket_taken.kind_out = out_type.out_id and
+    wicket_taken.innings_no <= 2 and
     match.match_id = wicket_taken.match_id and
     extract(year from  match.match_date) = 2012 and
     out_type.out_name = 'caught'
@@ -84,7 +86,7 @@ season.purple_cap = player.player_id
 order by season.season_year
 ;
 
--- 5 --
+5 --
 with runs_scored(match_id, player_id, runs_scored) as (
     select batsman_scored.match_id, ball_by_ball.striker, sum(batsman_scored.runs_scored) as runs_scored from
     batsman_scored,
@@ -92,7 +94,8 @@ with runs_scored(match_id, player_id, runs_scored) as (
     where batsman_scored.match_id = ball_by_ball.match_id and
     batsman_scored.over_id = ball_by_ball.over_id and
     batsman_scored.ball_id = ball_by_ball.ball_id and
-    batsman_scored.innings_no = ball_by_ball.innings_no
+    batsman_scored.innings_no = ball_by_ball.innings_no and 
+    ball_by_ball.innings_no <= 2
     group by batsman_scored.match_id, ball_by_ball.striker
 ),
 losing_team(match_id, losing_team) as (
@@ -176,7 +179,8 @@ with runs_scored(match_id, player_id, runs_scored) as (
     where batsman_scored.match_id = ball_by_ball.match_id and
     batsman_scored.over_id = ball_by_ball.over_id and
     batsman_scored.ball_id = ball_by_ball.ball_id and
-    batsman_scored.innings_no = ball_by_ball.innings_no
+    batsman_scored.innings_no = ball_by_ball.innings_no and
+    batsman_scored.innings_no <= 2
     group by batsman_scored.match_id, ball_by_ball.striker
 ), 
 runs_scored_season(season_id, team_id, player_id, runs_scored) as (
@@ -214,7 +218,8 @@ with num_sixes(match_id, team_id, innings_no, sixes) as (
     where batsman_scored.match_id = ball_by_ball.match_id and
     batsman_scored.over_id = ball_by_ball.over_id and
     batsman_scored.ball_id = ball_by_ball.ball_id and
-    batsman_scored.innings_no = ball_by_ball.innings_no
+    batsman_scored.innings_no = ball_by_ball.innings_no and
+    batsman_scored.innings_no <= 2
     group by batsman_scored.match_id, ball_by_ball.team_batting, ball_by_ball.innings_no
 )
 select team_name, opponent_team_name, sixes from (
@@ -250,7 +255,8 @@ with num_wickets(player_id, num_wickets) as (
     where ball_by_ball.match_id = bowlers_wickets.match_id and
         ball_by_ball.over_id = bowlers_wickets.over_id and
         ball_by_ball.ball_id = bowlers_wickets.ball_id and
-        ball_by_ball.innings_no = bowlers_wickets.innings_no
+        ball_by_ball.innings_no = bowlers_wickets.innings_no and
+        ball_by_ball.innings_no <= 2
     group by ball_by_ball.bowler
 ), 
 average_bowlers(bowling_id, bowling_skill, average) as (
@@ -269,7 +275,8 @@ runs_scored(match_id, player_id, runs_scored) as (
     where batsman_scored.match_id = ball_by_ball.match_id and
     batsman_scored.over_id = ball_by_ball.over_id and
     batsman_scored.ball_id = ball_by_ball.ball_id and
-    batsman_scored.innings_no = ball_by_ball.innings_no
+    batsman_scored.innings_no = ball_by_ball.innings_no and
+    ball_by_ball.innings_no <= 2
     group by batsman_scored.match_id, ball_by_ball.striker
 ), 
 batting_average(player_id, average) as (
@@ -303,6 +310,7 @@ with num_wickets(season_id, player_id, num_wickets) as (
         ball_by_ball.over_id = bowlers_wickets.over_id and
         ball_by_ball.ball_id = bowlers_wickets.ball_id and
         ball_by_ball.innings_no = bowlers_wickets.innings_no and 
+        ball_by_ball.innings_no <= 2 and
         ball_by_ball.match_id = match.match_id
     group by match.season_id, ball_by_ball.bowler
 ), 
@@ -315,6 +323,7 @@ runs_scored(season_id, player_id, runs_scored) as (
     batsman_scored.over_id = ball_by_ball.over_id and
     batsman_scored.ball_id = ball_by_ball.ball_id and
     batsman_scored.innings_no = ball_by_ball.innings_no and
+    batsman_scored.innings_no <= 2 and
     batsman_scored.match_id = match.match_id
     group by match.season_id, ball_by_ball.striker
 ), 
@@ -339,3 +348,5 @@ runs_scored.runs_scored >= 150 and
 num_wickets.num_wickets >= 5 and
 matches_played.num_matches >= 10
 order by num_wickets.num_wickets desc, runs_scored.runs_scored desc, player.player_name 
+
+-- 12 --
