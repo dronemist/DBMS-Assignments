@@ -222,7 +222,7 @@ with num_sixes(match_id, team_id, innings_no, sixes) as (
     batsman_scored.innings_no <= 2
     group by batsman_scored.match_id, ball_by_ball.team_batting, ball_by_ball.innings_no
 )
-select team_name, opponent_team_name, sixes from (
+select team_name, opponent_team_name, sixes as number_of_sixes from (
     select t1.team_name as team_name, t2.team_name as opponent_team_name, num_sixes.sixes, 
     rank() over(partition by season.season_id order by num_sixes.sixes desc, t1.team_name) as rank
     from team as t1,
@@ -286,16 +286,16 @@ batting_average(player_id, average) as (
     group by player_id
 )
 select bowling_skill, player_name, batting_average from (
-    select average_bowlers.bowling_skill, player.player_name, batting_average.average as batting_average,
+    select average_bowlers.bowling_skill, player.player_name, batting_average.average as batting_average, average_bowlers.average, num_wickets.num_wickets,
     rank() over (partition by average_bowlers.bowling_id order by batting_average.average desc, player.player_name) as rank
     from average_bowlers, player, num_wickets, batting_average
     where player.player_id = batting_average.player_id and
     player.player_id = num_wickets.player_id and
     player.bowling_skill = average_bowlers.bowling_id and
-    num_wickets.num_wickets > average_bowlers.average
+    num_wickets.num_wickets > all (select average from average_bowlers)
 ) temp
 where rank = 1
-order by bowling_skill
+order by bowling_skill, rank
 ;
 
 -- 11 -- 
@@ -534,8 +534,7 @@ with run_conceded(match_id, over_id, innings_no, player_id, runs) as (
     where batsman_scored.match_id = ball_by_ball.match_id and
     batsman_scored.over_id = ball_by_ball.over_id and
     batsman_scored.ball_id = ball_by_ball.ball_id and
-    batsman_scored.innings_no = ball_by_ball.innings_no and
-    batsman_scored.innings_no <= 2
+    batsman_scored.innings_no = ball_by_ball.innings_no
     group by batsman_scored.match_id, ball_by_ball.bowler, ball_by_ball.over_id, ball_by_ball.innings_no
 ),
 matches_played(team_id, player_id, num_matches) as (
@@ -610,3 +609,68 @@ select player_name from (
 where rank <= 10
 order by rank
 ;
+
+-- 21 --
+with boundaries_scored(match_id, team_id, boundaries) as (
+    select batsman_scored.match_id, ball_by_ball.team_batting, 
+    sum(case when batsman_scored.runs_scored in (4,6) then 1 else 0 end) as boundaries from
+    batsman_scored,
+    ball_by_ball
+    where batsman_scored.match_id = ball_by_ball.match_id and
+    batsman_scored.over_id = ball_by_ball.over_id and
+    batsman_scored.ball_id = ball_by_ball.ball_id and
+    batsman_scored.innings_no = ball_by_ball.innings_no and
+    batsman_scored.innings_no = 2
+    group by batsman_scored.match_id, ball_by_ball.team_batting
+)
+select match_id, team_1_name, team_2_name, match_winner_name, number_of_boundaries from (
+    select match.match_id, t1.team_name as team_1_name, t2.team_name as team_2_name, 
+    t3.team_name as match_winner_name, boundaries_scored.boundaries as number_of_boundaries,
+    rank() over (order by boundaries_scored.boundaries, t3.team_name, t1.team_name, t2.team_name) as rank
+    from match, boundaries_scored, team as t1, team as t2, team as t3
+    where t1.team_id = match.team_1 and
+    t2.team_id = match.team_2 and
+    t3.team_id = match.match_winner and 
+    match.match_id = boundaries_scored.match_id and
+    match.match_winner = boundaries_scored.team_id
+) temp
+where rank <= 3
+order by rank;
+
+-- 22 --
+with run_conceded(player_id, runs) as (
+    select ball_by_ball.bowler, sum(batsman_scored.runs_scored) as runs
+    from batsman_scored, ball_by_ball
+    where batsman_scored.match_id = ball_by_ball.match_id and
+    batsman_scored.over_id = ball_by_ball.over_id and
+    batsman_scored.ball_id = ball_by_ball.ball_id and
+    batsman_scored.innings_no = ball_by_ball.innings_no and
+    batsman_scored.innings_no <= 2
+    group by ball_by_ball.bowler
+),
+num_wickets(player_id, num_wickets) as (
+    select ball_by_ball.bowler as player_id, Count(*) as num_wickets from
+        (select * from wicket_taken, out_type
+        where wicket_taken.kind_out = out_type.out_id and (
+        out_type.out_name NOT IN ('run out', 'retired hurt', 'obstructing the field'))
+        ) AS bowlers_wickets, 
+        ball_by_ball
+    where ball_by_ball.match_id = bowlers_wickets.match_id and
+        ball_by_ball.over_id = bowlers_wickets.over_id and
+        ball_by_ball.ball_id = bowlers_wickets.ball_id and
+        ball_by_ball.innings_no = bowlers_wickets.innings_no and
+        ball_by_ball.innings_no <= 2
+    group by ball_by_ball.bowler
+)
+select country_name from (
+    select country.country_name, player.player_name, num_wickets.num_wickets, run_conceded.runs,
+    cast(run_conceded.runs as decimal) / num_wickets.num_wickets as average, 
+    rank() over (order by cast(run_conceded.runs as decimal) / num_wickets.num_wickets, player.player_name) as rank
+    from num_wickets, run_conceded, player, country
+    where player.player_id = num_wickets.player_id and
+    player.player_id = run_conceded.player_id and
+    player.country_id = country.country_id
+) temp
+where rank <= 3
+order by rank;
+
