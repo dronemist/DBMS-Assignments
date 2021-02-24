@@ -349,6 +349,7 @@ runs_scored.runs_scored >= 150 and
 num_wickets.num_wickets >= 5 and
 matches_played.num_matches >= 10
 order by num_wickets.num_wickets desc, runs_scored.runs_scored desc, player.player_name 
+;
 
 -- 12 --
 with num_wickets(match_id, player_id, num_wickets) as (
@@ -397,6 +398,7 @@ seasons_played, player
 where player.player_id = seasons_played.player_id and
 seasons_played.seasons_played = (select count(*) from season)
 order by player.player_name 
+;
 
 -- 14 --
 with runs_scored(match_id, player_id, runs_scored) as (
@@ -674,3 +676,4 @@ select country_name from (
 where rank <= 3
 order by rank;
 
+-- TODO -> LOOK AT 10TH AND 14TH
