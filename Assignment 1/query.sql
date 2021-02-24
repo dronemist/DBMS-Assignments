@@ -260,14 +260,9 @@ with num_wickets(player_id, num_wickets) as (
         ball_by_ball.innings_no <= 2
     group by ball_by_ball.bowler
 ), 
-average_bowlers(bowling_id, bowling_skill, average) as (
-    select bowling_style.bowling_id, bowling_style.bowling_skill, avg(num_wickets.num_wickets) from 
-    bowling_style, 
-    num_wickets,
-    player
-    where num_wickets.player_id = player.player_id and
-    player.bowling_skill = bowling_style.bowling_id
-    group by bowling_style.bowling_id, bowling_style.bowling_skill
+average_bowler(average) as (
+    select avg(num_wickets.num_wickets) from 
+    num_wickets
 ), 
 runs_scored(match_id, player_id, runs_scored) as (
     select batsman_scored.match_id, ball_by_ball.striker, sum(batsman_scored.runs_scored) as runs_scored from
@@ -286,13 +281,13 @@ batting_average(player_id, average) as (
     group by player_id
 )
 select bowling_skill, player_name, batting_average from (
-    select average_bowlers.bowling_skill, player.player_name, batting_average.average as batting_average, average_bowlers.average, num_wickets.num_wickets,
-    rank() over (partition by average_bowlers.bowling_id order by batting_average.average desc, player.player_name) as rank
-    from average_bowlers, player, num_wickets, batting_average
+    select bowling_style.bowling_skill, player.player_name, batting_average.average as batting_average, average_bowler.average, num_wickets.num_wickets,
+    rank() over (partition by bowling_style.bowling_id order by batting_average.average desc, player.player_name) as rank
+    from average_bowler, player, num_wickets, batting_average, bowling_style
     where player.player_id = batting_average.player_id and
     player.player_id = num_wickets.player_id and
-    player.bowling_skill = average_bowlers.bowling_id and
-    num_wickets.num_wickets > all (select average from average_bowlers)
+    player.bowling_skill = bowling_style.bowling_id and 
+    num_wickets.num_wickets > average_bowler.average
 ) temp
 where rank = 1
 order by bowling_skill, rank
@@ -424,7 +419,7 @@ most_fifty_winning(match_id, team_id, num_fifty) as (
 )
 select season_year, match_id, team_name from (
     select season.season_year, most_fifty_winning.match_id, team.team_name,
-    rank() over(partition by season.season_id order by most_fifty_winning.num_fifty desc, team.team_name) as rank
+    rank() over(partition by season.season_id order by most_fifty_winning.num_fifty desc, team.team_name, most_fifty_winning.match_id) as rank
     from season, most_fifty_winning, team, match
     where match.match_id = most_fifty_winning.match_id and
     most_fifty_winning.team_id = team.team_id and
