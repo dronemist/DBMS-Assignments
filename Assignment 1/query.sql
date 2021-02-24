@@ -193,7 +193,7 @@ runs_scored_season(season_id, team_id, player_id, runs_scored) as (
     runs_scored.match_id = player_match.match_id
     group by match.season_id, player_match.team_id, runs_scored.player_id
 )
-select team_name, player_name, runs_scored from (
+select team_name, player_name, runs_scored as runs from (
     select team.team_name, player.player_name, runs_scored_season.runs_scored,  
     rank() over (partition by runs_scored_season.season_id, runs_scored_season.team_id order by runs_scored_season.runs_scored DESC, player.player_name) as rank
     from runs_scored_season,
@@ -335,7 +335,7 @@ matches_played(season_id, player_id, num_matches) as (
     where player_match.match_id = match.match_id
     group by match.season_id, player_match.player_id
 )
-select season.season_year, player.player_name, num_wickets.num_wickets, runs_scored.runs_scored from 
+select season.season_year, player.player_name, num_wickets.num_wickets, runs_scored.runs_scored as runs from 
 season, player, num_wickets, matches_played, runs_scored, batting_style
 where player.player_id = matches_played.player_id and
 player.player_id = num_wickets.player_id and
@@ -587,7 +587,7 @@ average_runs(team_id, average) as (
     season.season_year = 2010
     group by team_id
 )
-select team.team_name, average_runs.average from
+select team.team_name, average_runs.average as avg_runs from
 team, average_runs
 where team.team_id = average_runs.team_id
 order by team.team_name;
@@ -600,7 +600,7 @@ with num_out(player_id, num) as (
     wicket_taken.innings_no <= 2
     group by wicket_taken.player_out
 )
-select player_name from (
+select player_name as player_names from (
     select player.player_name, num_out.num,
     rank() over(order by num_out.num desc, player.player_name) from 
     player, num_out
