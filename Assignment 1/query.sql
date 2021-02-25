@@ -280,7 +280,7 @@ batting_average(player_id, average) as (
     from runs_scored
     group by player_id
 )
-select bowling_skill, player_name, batting_average from (
+select bowling_skill as bowling_category, player_name, batting_average from (
     select bowling_style.bowling_skill, player.player_name, batting_average.average as batting_average, average_bowler.average, num_wickets.num_wickets,
     rank() over (partition by bowling_style.bowling_id order by batting_average.average desc, player.player_name) as rank
     from average_bowler, player, num_wickets, batting_average, bowling_style
