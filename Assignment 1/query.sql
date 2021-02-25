@@ -168,7 +168,7 @@ match_winner,
 team
 where match_winner.winner = team.team_id
 group by match_winner.winner, team.team_name
-order by count(*) DESC, team.team_name;
+order by count(*) DESC, team.team_name
 ;
 
 -- 8 --
