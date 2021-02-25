@@ -18,7 +18,7 @@ select wickets.match_id, player.player_name, team.team_name, wickets.num_wickets
     ) AS wickets, player, team 
     where wickets.bowler = player.player_id and 
     team.team_id = wickets.team_bowling
-    ORDER BY wickets.num_wickets DESC, player.player_name, team.team_name
+    ORDER BY wickets.num_wickets DESC, player.player_name, team.team_name, wickets.match_id
 ;
 
 -- 2 --
@@ -261,7 +261,7 @@ with num_wickets(player_id, num_wickets) as (
     group by ball_by_ball.bowler
 ), 
 average_bowler(average) as (
-    select avg(num_wickets.num_wickets) from 
+    select round(avg(num_wickets.num_wickets), 2) from 
     num_wickets
 ), 
 runs_scored(match_id, player_id, runs_scored) as (
@@ -276,7 +276,7 @@ runs_scored(match_id, player_id, runs_scored) as (
     group by batsman_scored.match_id, ball_by_ball.striker
 ), 
 batting_average(player_id, average) as (
-    select player_id, avg(runs_scored) 
+    select player_id, round(avg(runs_scored), 2) 
     from runs_scored
     group by player_id
 )
@@ -458,7 +458,7 @@ runs_scored(season_id, player_id, runs_scored) as (
     batsman_scored.match_id = match.match_id
     group by match.season_id, ball_by_ball.striker
 )
-select season.season_year, p2.player_name as top_batsmen, t2.runs_scored as max_runs, p1.player_name as top_bowler, t1.num_wickets as max_wickets from (
+select season.season_year, p2.player_name as top_batsman, t2.runs_scored as max_runs, p1.player_name as top_bowler, t1.num_wickets as max_wickets from (
     select num_wickets.season_id, num_wickets.player_id, num_wickets.num_wickets,
     rank() over(partition by num_wickets.season_id order by num_wickets.num_wickets desc, player.player_name) from
     num_wickets, player
@@ -661,8 +661,8 @@ num_wickets(player_id, num_wickets) as (
 )
 select country_name from (
     select country.country_name, player.player_name, num_wickets.num_wickets, run_conceded.runs,
-    cast(run_conceded.runs as decimal) / num_wickets.num_wickets as average, 
-    rank() over (order by cast(run_conceded.runs as decimal) / num_wickets.num_wickets, player.player_name) as rank
+    round(cast(run_conceded.runs as decimal) / num_wickets.num_wickets, 2) as average, 
+    rank() over (order by round(cast(run_conceded.runs as decimal) / num_wickets.num_wickets, 2), player.player_name) as rank
     from num_wickets, run_conceded, player, country
     where player.player_id = num_wickets.player_id and
     player.player_id = run_conceded.player_id and
