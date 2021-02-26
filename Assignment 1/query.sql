@@ -670,5 +670,3 @@ select country_name from (
 ) temp
 where rank <= 3
 order by rank;
-
--- TODO -> LOOK AT 10TH AND 14TH
