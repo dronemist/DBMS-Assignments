@@ -380,14 +380,16 @@ with num_paths(author1, author2, count) as (
     with recursive paths(author1, author2, paths, cited) as (
             select author1, author2, array[author1, author2], false
             from edge_authors
+            where author2 = 102
         union 
             select edge_authors.author1, paths.author2, 
             array[edge_authors.author1] || paths.paths,
+            paths.cited or 
             (
             select count(*) from papers_cited as p1
             where p1.authorid = paths.paths[1] and
             p1.papers_cited = 126
-            ) >= 1 or paths.cited
+            ) >= 1 
 
             from edge_authors, paths, papers_cited as p1
             where edge_authors.author2 = paths.author1 and
@@ -399,6 +401,7 @@ with num_paths(author1, author2, count) as (
     array_length(paths.paths, 1) = 2
     group by author1, author2
 )
+
 select 
     (case 
     when a1.componenet_id != a2.componenet_id then -1
@@ -422,12 +425,13 @@ with num_paths(author1, author2, count) as (
             group by authorid
         )
             select author1, author2, array[author1, author2], true, true, cast(-1 as bigint)
-            from edge_authors
+            from edge_authors where
+            author2 = 456
         union 
             select edge_authors.author1, paths.author2, 
             array[edge_authors.author1] || paths.paths,
-            (array_length(paths.paths, 1) = 2 or n1.count < last_count) and paths.increasing,
-            (array_length(paths.paths, 1) = 2 or n1.count > last_count) and paths.decreasing,
+            paths.increasing and (array_length(paths.paths, 1) = 2 or n1.count < last_count),
+            paths.decreasing and (array_length(paths.paths, 1) = 2 or n1.count > last_count),
             n1.count
             from edge_authors, paths, num_cited as n1
             where edge_authors.author2 = paths.author1 and
@@ -523,7 +527,8 @@ order by rank
 with num_paths(author1, author2, count) as (
     with recursive paths(author1, author2, paths, contains) as (
         select author1, author2, array[author1, author2], false
-        from edge_authors
+        from edge_authors where
+        author2 = 321
     union 
         select edge_authors.author1, paths.author2, 
         array[edge_authors.author1] || paths.paths,
@@ -568,7 +573,8 @@ with num_paths(author1, author2, count) as (
             array[a1.city, a2.city]
             from edge_authors, authordetails as a1, authordetails as a2
             where a1.authorid = author1 and
-            a2.authorid = author2
+            a2.authorid = author2 and
+            author2 = 321
         union 
             select edge_authors.author1, paths.author2, 
             array[edge_authors.author1] || paths.paths,
@@ -618,7 +624,8 @@ with num_paths(author1, author2, count) as (
             papers_cited.authorid != authorpaperlist.authorid
         )
             select author1, author2, array[author1, author2]
-            from edge_authors
+            from edge_authors where 
+            author2 = 321
         union 
             select edge_authors.author1, paths.author2, 
             array[edge_authors.author1] || paths.paths
@@ -718,3 +725,4 @@ drop view connected_components cascade;
 drop view edge_authors cascade;
 drop view edge_authors_conf cascade;
 drop view papers_cited cascade;
+-- TODO -> 15, 17
