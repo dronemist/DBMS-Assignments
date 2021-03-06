@@ -11,6 +11,24 @@ create view edge_authors as (
     a1.authorid != a2.authorid
 );
 
+create view edge_authors_conf as (
+    select a1.authorid as author1, a1.authorid as author2, p1.conferencename as conference
+    from authorpaperlist as a1, paperdetails as p1
+    where a1.paperid = p1.paperid
+    union
+    select a1.authorid as author1, a2.authorid as author2, p1.conferencename as conference    
+    from authorpaperlist as a1, authorpaperlist as a2, paperdetails as p1
+    where a1.paperid = a2.paperid and 
+    p1.paperid = a1.paperid and
+    a1.authorid != a2.authorid
+    union
+    select a2.authorid as author1, a1.authorid as author2, p1.conferencename as conference
+    from authorpaperlist as a1, authorpaperlist as a2, paperdetails as p1
+    where a1.paperid = a2.paperid and 
+    p1.paperid = a1.paperid and
+    a1.authorid != a2.authorid
+);
+
 create view connected_components as (
     with reachable_list(authorid, list) as (
         with recursive reachable_authors(author1, author2) as (
@@ -487,26 +505,216 @@ citations(paperid, count) as (
     select paper2, count(*) from
     reachable
     group by paper2
-),
-third_degree_papers(authorid, paperid) as (
-    select distinct third_degree_connections.author1, a1.paperid
-    from third_degree_connections, authorpaperlist as a1
-    where 
-    a1.authorid = third_degree_connections.author2 
 )
-select * from third_degree_papers
--- select * from (
---     select third_degree_connections.author1, sum(citations.count), 
---     rank() over (order by sum(citations.count) desc, third_degree_connections.author1)
---     from third_degree_connections, citations, authorpaperlist as a1
---     where 
---     a1.authorid = third_degree_connections.author2 and
---     a1.paperid = citations.paperid
---     group by third_degree_connections.author1
--- ) temp
+select authorid from (
+    select third_degree_connections.author1 as authorid, sum(citations.count), 
+    rank() over (order by sum(citations.count) desc, third_degree_connections.author1)
+    from third_degree_connections, citations, authorpaperlist as a1
+    where 
+    a1.authorid = third_degree_connections.author2 and
+    a1.paperid = citations.paperid
+    group by third_degree_connections.author1
+) temp
+where rank <= 10
+order by rank
+;
+
+-- 18 --
+with num_paths(author1, author2, count) as (
+    with recursive paths(author1, author2, paths, contains) as (
+        select author1, author2, array[author1, author2], false
+        from edge_authors
+    union 
+        select edge_authors.author1, paths.author2, 
+        array[edge_authors.author1] || paths.paths,
+        paths.contains or paths.paths[1] in (1436, 562, 921)
+
+        from edge_authors, paths
+        where edge_authors.author2 = paths.author1 and
+        edge_authors.author1 != all(paths.paths)
+    )
+    select author1, author2, count(*)
+    from paths
+    where paths.contains
+    group by author1, author2
+)
+select 
+    (case 
+    when a1.componenet_id != a2.componenet_id then -1
+    else coalesce(
+        (select num_paths.count from num_paths
+            where num_paths.author1 = a1.authorid and
+            num_paths.author2 = a2.authorid
+        ), 0)
+    end) as count
+from connected_components as a1, connected_components as a2
+where a1.authorid = 3552 and
+a2.authorid = 321
+;
+
+-- 19 --
+with num_paths(author1, author2, count) as (
+    with recursive paths(author1, author2, paths, cities) as (
+        with direct_citations(author1, author2) as (
+                select distinct a1.authorid, a2.authorid from
+                authorpaperlist as a1, authorpaperlist as a2,
+                citationlist as c1
+                where ((c1.paperid1 = a1.paperid and
+                c1.paperid2 = a2.paperid) or
+                (c1.paperid1 = a2.paperid and c1.paperid2 = a1.paperid)) and
+                a1.authorid != a2.authorid
+        )
+            select author1, author2, array[author1, author2],
+            array[a1.city, a2.city]
+            from edge_authors, authordetails as a1, authordetails as a2
+            where a1.authorid = author1 and
+            a2.authorid = author2
+        union 
+            select edge_authors.author1, paths.author2, 
+            array[edge_authors.author1] || paths.paths,
+            array[a1.city] || paths.cities
+
+            from edge_authors, paths, authordetails as a1
+            where edge_authors.author2 = paths.author1 and
+            edge_authors.author1 != all(paths.paths) and
+            a1.authorid = edge_authors.author1 and
+
+            -- Check for different cities
+            paths.cities[1] != all(paths.cities[2 : array_length(paths.cities, 1) - 1]) and
+
+            -- Check for direct citations
+            (
+                select count(*) from 
+                direct_citations as d1
+                where d1.author1 = paths.paths[1] and
+                d1.author2 = any(paths.paths[2 : array_length(paths.paths, 1) - 1])
+            ) = 0
+    )
+    select author1, author2, count(*) 
+    from paths
+    group by author1, author2
+)
+select 
+    (case 
+    when a1.componenet_id != a2.componenet_id then -1
+    else coalesce(
+        (select num_paths.count from num_paths
+            where num_paths.author1 = a1.authorid and
+            num_paths.author2 = a2.authorid
+        ), 0)
+    end) as count
+from connected_components as a1, connected_components as a2
+where a1.authorid = 3552 and
+a2.authorid = 321
+;
+
+-- 20 --
+with num_paths(author1, author2, count) as (
+    with recursive paths(author1, author2, paths) as (
+        with author_cited(author1, author2) as (
+            select distinct papers_cited.authorid, authorpaperlist.authorid from
+            authorpaperlist, papers_cited
+            where authorpaperlist.paperid = papers_cited.papers_cited and
+            papers_cited.authorid != authorpaperlist.authorid
+        )
+            select author1, author2, array[author1, author2]
+            from edge_authors
+        union 
+            select edge_authors.author1, paths.author2, 
+            array[edge_authors.author1] || paths.paths
+
+            from edge_authors, paths
+            where edge_authors.author2 = paths.author1 and
+            edge_authors.author1 != all(paths.paths) and
+
+            -- Check for citations
+            (
+                select count(*) from 
+                author_cited as d1
+                where (d1.author1 = paths.paths[1] and
+                d1.author2 = any(paths.paths[2 : array_length(paths.paths, 1) - 1])) or
+                (d1.author2 = paths.paths[1] and
+                d1.author1 = any(paths.paths[2 : array_length(paths.paths, 1) - 1]))
+            ) = 0
+    )
+    select author1, author2, count(*) 
+    from paths
+    group by author1, author2
+)
+select 
+    (case 
+    when a1.componenet_id != a2.componenet_id then -1
+    else coalesce(
+        (select num_paths.count from num_paths
+            where num_paths.author1 = a1.authorid and
+            num_paths.author2 = a2.authorid
+        ), 0)
+    end) as count
+from connected_components as a1, connected_components as a2
+where a1.authorid = 3552 and
+a2.authorid = 321
+;
+
+-- 21 --
+with connected_components_conf(conference, count) as (
+    with reachable_list(authorid, conference, list) as (
+        with recursive paths(author1, author2, conference) as (
+                select author1, author2, conference
+                from edge_authors_conf
+            union 
+                select edge_authors_conf.author1, paths.author2, 
+                paths.conference
+                from edge_authors_conf, paths
+                where edge_authors_conf.author2 = paths.author1 and
+                edge_authors_conf.conference = paths.conference
+        )
+        select paths.author1, paths.conference,
+        array_agg(paths.author2 order by paths.author2) 
+        from paths
+        group by paths.author1, paths.conference
+    )
+    select conference, count(*) from (
+        select conference, list from
+        reachable_list
+        group by conference, list
+    ) temp
+    group by conference
+)
+select * from connected_components_conf
+order by count desc, conference
+;
+
+-- 22 --
+with connected_components_conf(conference, count) as (
+    with reachable_list(authorid, conference, list) as (
+        with recursive paths(author1, author2, conference) as (
+                select author1, author2, conference
+                from edge_authors_conf
+            union 
+                select edge_authors_conf.author1, paths.author2, 
+                paths.conference
+                from edge_authors_conf, paths
+                where edge_authors_conf.author2 = paths.author1 and
+                edge_authors_conf.conference = paths.conference
+        )
+        select paths.author1, paths.conference,
+        array_agg(paths.author2 order by paths.author2) 
+        from paths
+        group by paths.author1, paths.conference
+    )
+    select conference, array_length(temp.list, 1)
+    from (
+        select conference, list from
+        reachable_list
+        group by conference, list
+    ) temp
+)
+select * from connected_components_conf
+order by count, conference
 ;
 
 -- CLEANUP --
 drop view connected_components cascade;
 drop view edge_authors cascade;
+drop view edge_authors_conf cascade;
 drop view papers_cited cascade;
