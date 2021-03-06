@@ -10,6 +10,7 @@ create view edge_authors as (
     where a1.paperid = a2.paperid and
     a1.authorid != a2.authorid
 );
+
 create view connected_components as (
     with reachable_list(authorid, list) as (
         with recursive reachable_authors(author1, author2) as (
@@ -27,6 +28,20 @@ create view connected_components as (
     )
     select *, dense_rank() over (order by list) as componenet_id
     from reachable_list
+);
+
+create view papers_cited(authorid, papers_cited) as (
+    with recursive reachable(paper1, paper2) as (
+            select paperid1, paperid2 from 
+            citationlist
+        union
+            select citationlist.paperid1, reachable.paper2 from
+            reachable, citationlist
+            where citationlist.paperid2 = reachable.paper1
+    )
+    select distinct authorid, reachable.paper2
+    from reachable, authorpaperlist
+    where authorpaperlist.paperid = reachable.paper1
 );
 
 -- 1 --
@@ -336,15 +351,162 @@ select
             where num_paths.author1 = a1.authorid and
             num_paths.author2 = a2.authorid
         ), 0)
-    end) as count, a1.authorid, a2.authorid
+    end) as count
 from connected_components as a1, connected_components as a2
 where a1.authorid = 1558 and
 a2.authorid = 2826
 ;
 
 -- 14 --
+with num_paths(author1, author2, count) as ( 
+    with recursive paths(author1, author2, paths, cited) as (
+            select author1, author2, array[author1, author2], false
+            from edge_authors
+        union 
+            select edge_authors.author1, paths.author2, 
+            array[edge_authors.author1] || paths.paths,
+            (
+            select count(*) from papers_cited as p1
+            where p1.authorid = paths.paths[1] and
+            p1.papers_cited = 126
+            ) >= 1 or paths.cited
 
+            from edge_authors, paths, papers_cited as p1
+            where edge_authors.author2 = paths.author1 and
+            edge_authors.author1 != all(paths.paths)
+    )
+    select author1, author2, count(*) 
+    from paths
+    where paths.cited or
+    array_length(paths.paths, 1) = 2
+    group by author1, author2
+)
+select 
+    (case 
+    when a1.componenet_id != a2.componenet_id then -1
+    else coalesce(
+        (select num_paths.count from num_paths
+            where num_paths.author1 = a1.authorid and
+            num_paths.author2 = a2.authorid
+        ), 0)
+    end) as count
+from connected_components as a1, connected_components as a2
+where a1.authorid = 704 and
+a2.authorid = 102
+;
+
+-- 15 --
+with num_paths(author1, author2, count) as (
+    with recursive paths(author1, author2, paths, increasing, decreasing, last_count) as (
+        with num_cited(authorid, count) as (
+            select authorid, count(*) from
+            papers_cited
+            group by authorid
+        )
+            select author1, author2, array[author1, author2], true, true, cast(-1 as bigint)
+            from edge_authors
+        union 
+            select edge_authors.author1, paths.author2, 
+            array[edge_authors.author1] || paths.paths,
+            (array_length(paths.paths, 1) = 2 or n1.count < last_count) and paths.increasing,
+            (array_length(paths.paths, 1) = 2 or n1.count > last_count) and paths.decreasing,
+            n1.count
+            from edge_authors, paths, num_cited as n1
+            where edge_authors.author2 = paths.author1 and
+            edge_authors.author1 != all(paths.paths) and
+            n1.authorid = paths.paths[1] and
+            (paths.decreasing or paths.increasing)
+    )
+    select author1, author2, count(*) 
+    from paths
+    where paths.increasing or
+    paths.decreasing
+    group by author1, author2 
+)
+select 
+    (case 
+    when a1.componenet_id != a2.componenet_id then -1
+    else coalesce(
+        (select num_paths.count from num_paths
+            where num_paths.author1 = a1.authorid and
+            num_paths.author2 = a2.authorid
+        ), 0)
+    end) as count
+from connected_components as a1, connected_components as a2
+where a1.authorid = 1745 and
+a2.authorid = 456
+;
+
+-- 16 --
+with author_cited(author1, author2) as (
+    select distinct papers_cited.authorid, authorpaperlist.authorid from
+    authorpaperlist, papers_cited
+    where authorpaperlist.paperid = papers_cited.papers_cited and
+    papers_cited.authorid != authorpaperlist.authorid
+),
+future_contributions(authorid, num, rank) as (
+    select author_cited.author1, count(*),
+    rank() over (order by count(*) desc, author_cited.author1)
+    from author_cited
+    where (
+        select count(*) from edge_authors
+        where edge_authors.author1 = author_cited.author1 and
+        edge_authors.author2 = author_cited.author2
+    ) = 0 
+    group by author_cited.author1
+)
+select authorid from future_contributions
+where rank <= 10
+order by rank
+;
+
+-- 17 --
+with third_degree_connections(author1, author2) as (
+    with recursive paths(author1, author2, paths) as (
+        select author1, author2, array[author1, author2] from
+        edge_authors
+    union 
+        select edge_authors.author1, paths.author2, array[edge_authors.author1] || paths.paths
+        from edge_authors, paths
+        where edge_authors.author2 = paths.author1 and
+        edge_authors.author1 != all(paths.paths)
+    )
+    select author1, author2 from
+    paths
+    where array_length(paths, 1) = 4
+),
+citations(paperid, count) as (
+    with recursive reachable(paper1, paper2) as (
+            select paperid1, paperid2 from 
+            citationlist
+        union
+            select citationlist.paperid1, reachable.paper2 from
+            reachable, citationlist
+            where citationlist.paperid2 = reachable.paper1
+    )
+    select paper2, count(*) from
+    reachable
+    group by paper2
+),
+third_degree_papers(authorid, paperid) as (
+    select distinct third_degree_connections.author1, a1.paperid
+    from third_degree_connections, authorpaperlist as a1
+    where 
+    a1.authorid = third_degree_connections.author2 
+)
+select * from third_degree_papers
+-- select * from (
+--     select third_degree_connections.author1, sum(citations.count), 
+--     rank() over (order by sum(citations.count) desc, third_degree_connections.author1)
+--     from third_degree_connections, citations, authorpaperlist as a1
+--     where 
+--     a1.authorid = third_degree_connections.author2 and
+--     a1.paperid = citations.paperid
+--     group by third_degree_connections.author1
+-- ) temp
+;
 
 -- CLEANUP --
 drop view connected_components cascade;
 drop view edge_authors cascade;
+drop view papers_cited cascade;
