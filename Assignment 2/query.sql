@@ -62,6 +62,20 @@ create view papers_cited(authorid, papers_cited) as (
     where authorpaperlist.paperid = reachable.paper1
 );
 
+create view author_citation(paperid, authorid) as (
+    with recursive reachable(paper1, paper2) as (
+            select paperid1, paperid2 from 
+            citationlist
+        union
+            select citationlist.paperid1, reachable.paper2 from
+            reachable, citationlist
+            where citationlist.paperid2 = reachable.paper1
+    )
+    select reachable.paper1, authorid
+    from reachable, authorpaperlist
+    where reachable.paper2 = authorpaperlist.paperid
+)
+;
 -- 1 --
 with recursive reachable(airport1, airport2, carrier) as (
         select flights.originairportid, flights.destairportid, flights.carrier from 
@@ -312,12 +326,13 @@ order by a1.city, a2.city
 -- 12 --
 with recursive paths(author1, author2, paths) as (
         select author1, author2, array[author1, author2] from
-        edge_authors
+        edge_authors where 
+        author1 = 1235
     union 
-        select edge_authors.author1, paths.author2, array[edge_authors.author1] || paths.paths
+        select paths.author1, edge_authors.author2, paths.paths || array[edge_authors.author2] 
         from edge_authors, paths
-        where edge_authors.author2 = paths.author1 and
-        edge_authors.author1 != all(paths.paths)
+        where edge_authors.author1 = paths.author2 and
+        edge_authors.author2 != all(paths.paths)
 ),
 shortest_path(author1, author2, length) as (
     select author1, author2, min(array_length(paths, 1) - 1)
@@ -419,10 +434,17 @@ a2.authorid = 102
 -- 15 --
 with num_paths(author1, author2, count) as (
     with recursive paths(author1, author2, paths, increasing, decreasing, last_count) as (
-        with num_cited(authorid, count) as (
+        with num_citations_temp(authorid, count) as (
             select authorid, count(*) from
-            papers_cited
+            author_citation
             group by authorid
+        ), 
+        num_citations(authorid, count) as (
+            select a1.authorid, coalesce(
+                (select num_citations_temp.count from num_citations_temp
+                where a1.authorid = num_citations_temp.authorid)
+                , 0
+            ) from authordetails as a1
         )
             select author1, author2, array[author1, author2], true, true, cast(-1 as bigint)
             from edge_authors where
@@ -433,7 +455,7 @@ with num_paths(author1, author2, count) as (
             paths.increasing and (array_length(paths.paths, 1) = 2 or n1.count < last_count),
             paths.decreasing and (array_length(paths.paths, 1) = 2 or n1.count > last_count),
             n1.count
-            from edge_authors, paths, num_cited as n1
+            from edge_authors, paths, num_citations as n1
             where edge_authors.author2 = paths.author1 and
             edge_authors.author1 != all(paths.paths) and
             n1.authorid = paths.paths[1] and
@@ -491,11 +513,17 @@ with third_degree_connections(author1, author2) as (
         select edge_authors.author1, paths.author2, array[edge_authors.author1] || paths.paths
         from edge_authors, paths
         where edge_authors.author2 = paths.author1 and
-        edge_authors.author1 != all(paths.paths)
+        edge_authors.author1 != all(paths.paths) and
+        array_length(paths.paths, 1) <= 4
+    ), 
+    shortest_path(author1, author2, length) as (
+        select author1, author2, min(array_length(paths, 1) - 1)
+        from paths
+        group by author1, author2
     )
     select author1, author2 from
-    paths
-    where array_length(paths, 1) = 4
+    shortest_path
+    where shortest_path.length = 3
 ),
 citations(paperid, count) as (
     with recursive reachable(paper1, paper2) as (
@@ -725,4 +753,4 @@ drop view connected_components cascade;
 drop view edge_authors cascade;
 drop view edge_authors_conf cascade;
 drop view papers_cited cascade;
--- TODO -> 15, 17
+drop view author_citation;
