@@ -291,14 +291,16 @@ day(day) as (
     union
     select day + 1 from day where day <= 30
 )
-select day.day, coalesce(
-    (select delays.delay from 
-    delays, airports
-    where airports.airportid = delays.airportid and
-    airports.city = 'Albuquerque' and
-    delays.day = day.day), 0) as delay
-from day
-order by delay, day.day
+select temp.day from (
+    select day.day, coalesce(
+        (select delays.delay from 
+        delays, airports
+        where airports.airportid = delays.airportid and
+        airports.city = 'Albuquerque' and
+        delays.day = day.day), 0) as delay
+    from day
+) temp
+order by temp.delay, temp.day
 ;
 
 -- 10 --
@@ -338,20 +340,18 @@ order by temp.city
 ;
 
 -- 11 --
-with recursive paths(airport1, airport2, paths, last_delay) as (
-        select flights.originairportid, flights.destairportid, 
-        array[flights.originairportid, flights.destairportid],
+with recursive paths(airport1, airport2, last_delay) as (
+        select flights.originairportid, flights.destairportid,
         flights.arrivaldelay + flights.departuredelay
         from flights
     union
-        select flights.originairportid, paths.airport2, array[flights.originairportid] || paths.paths,
+        select flights.originairportid, paths.airport2,
         flights.arrivaldelay + flights.departuredelay
         from paths, flights 
-        where flights.destairportid = paths.airport1 and
-        flights.originairportid != all(paths.paths) and 
+        where flights.destairportid = paths.airport1 and 
         flights.arrivaldelay + flights.departuredelay <= paths.last_delay
 )
-select a1.city, a2.city from 
+select distinct a1.city as name1, a2.city as name2 from 
 paths, airports as a1, airports as a2
 where a1.airportid = paths.airport1 and
 a2.airportid = paths.airport2
