@@ -76,17 +76,19 @@ create view author_citation(paperid, authorid) as (
     where reachable.paper2 = authorpaperlist.paperid
 )
 ;
+
 -- 1 --
 with recursive reachable(airport1, airport2, carrier) as (
         select flights.originairportid, flights.destairportid, flights.carrier from 
-        flights
+        flights where
+        flights.originairportid = 10140
     union
-        select flights.originairportid, reachable.airport2, flights.carrier from 
+        select reachable.airport1, flights.destairportid, reachable.carrier from 
         reachable, flights 
-        where flights.destairportid = reachable.airport1 and
+        where flights.originairportid = reachable.airport2 and
         flights.carrier = reachable.carrier
 )
-select distinct airports.city from
+select distinct airports.city as name from
 airports, reachable
 where reachable.airport1 = 10140 and
 reachable.airport2 = airports.airportid 
@@ -96,14 +98,15 @@ order by airports.city
 -- 2 --
 with recursive reachable(airport1, airport2, dayofweek) as (
         select flights.originairportid, flights.destairportid, flights.dayofweek from 
-        flights
+        flights where
+        flights.originairportid = 10140
     union
-        select flights.originairportid, reachable.airport2, flights.dayofweek from 
+        select reachable.airport1, flights.destairportid, reachable.dayofweek from 
         reachable, flights 
-        where flights.destairportid = reachable.airport1 and
+        where flights.originairportid = reachable.airport2 and
         flights.dayofweek = reachable.dayofweek
 )
-select distinct airports.city from
+select distinct airports.city as name from
 airports, reachable
 where reachable.airport1 = 10140 and
 reachable.airport2 = airports.airportid 
@@ -113,19 +116,20 @@ order by airports.city
 -- 3 --
 with recursive paths(airport1, airport2, paths) as (
         select flights.originairportid, flights.destairportid, array[flights.originairportid, flights.destairportid] from 
-        flights
+        flights where
+        flights.originairportid = 10140
     union
-        select flights.originairportid, paths.airport2, array[flights.originairportid] || paths.paths   from 
+        select paths.airport1, flights.destairportid, paths.paths || array[flights.destairportid]   from 
         paths, flights 
-        where flights.destairportid = paths.airport1 and
-        flights.originairportid != all(paths.paths)
+        where flights.originairportid = paths.airport2 and
+        flights.destairportid != all(paths.paths)
 ),
 num_paths(airport1, airport2, num_paths) as (
     select airport1, airport2, count(*) from
     paths
     group by airport1, airport2
 )
-select airports.city from 
+select airports.city as name from 
 airports, num_paths
 where num_paths.airport1 = 10140 and
 num_paths.airport2 = airports.airportid and
@@ -136,24 +140,27 @@ order by airports.city
 -- 4 --
 with recursive paths(airport1, airport2, paths) as (
         select flights.originairportid, flights.destairportid, array[flights.originairportid, flights.destairportid] from 
-        flights
+        flights where
+        flights.originairportid = 10140
     union
-        select flights.originairportid, paths.airport2, array[flights.originairportid] || paths.paths   from 
+        select paths.airport1, flights.destairportid, paths.paths || array[flights.destairportid]   from 
         paths, flights 
-        where flights.destairportid = paths.airport1 and
-        flights.originairportid != all(paths.paths)
+        where flights.originairportid = paths.airport2 and
+        flights.destairportid != all(paths.paths)
 ),
 circular_paths(airport1, len) as (
-    select flights.originairportid, 1 + array_length(paths.paths, 1) from
+    select paths.airport1, array_length(paths.paths, 1) from
     paths, flights
     where flights.destairportid = paths.airport1 and
     flights.originairportid = paths.airport2
 )
-select len as length 
-from circular_paths 
-where airport1 = 10140
-order by len desc
-fetch first 1 rows only
+select coalesce(
+    (select len as length 
+    from circular_paths 
+    where airport1 = 10140
+    order by len desc
+    fetch first 1 rows only), 0)
+as length
 ;
 
 -- 5 --
@@ -167,15 +174,17 @@ with recursive paths(airport1, airport2, paths) as (
         flights.originairportid != all(paths.paths)
 ),
 circular_paths(airport1, len) as (
-    select flights.originairportid, 1 + array_length(paths.paths, 1) from
+    select flights.originairportid, array_length(paths.paths, 1) from
     paths, flights
     where flights.destairportid = paths.airport1 and
     flights.originairportid = paths.airport2
 )
-select len as length 
-from circular_paths 
-order by len desc
-fetch first 1 rows only
+select coalesce ( 
+    (select len as length 
+    from circular_paths 
+    order by len desc
+    fetch first 1 rows only), 0)
+    as length
 ;
 
 -- 6 --
@@ -200,12 +209,14 @@ num_paths(airport1, airport2, num_paths) as (
     paths
     group by airport1, airport2
 )
-select num_paths as count from 
-num_paths, airports as a1, airports as a2 
-where num_paths.airport1 = a1.airportid and
-num_paths.airport2 = a2.airportid and 
-a1.city = 'Albuquerque' and
-a2.city = 'Chicago' 
+select coalesce(
+    (select num_paths as count from 
+    num_paths, airports as a1, airports as a2 
+    where num_paths.airport1 = a1.airportid and
+    num_paths.airport2 = a2.airportid and 
+    a1.city = 'Albuquerque' and
+    a2.city = 'Chicago'), 0)
+    as count 
 ; 
 
 -- 7 -- 
@@ -231,12 +242,14 @@ num_paths(airport1, airport2, num_paths) as (
     where paths.contains = 1
     group by airport1, airport2
 )
-select num_paths as count from 
-num_paths, airports as a1, airports as a2 
-where num_paths.airport1 = a1.airportid and
-num_paths.airport2 = a2.airportid and 
-a1.city = 'Albuquerque' and
-a2.city = 'Chicago' 
+select coalesce(
+    (select num_paths as count from 
+    num_paths, airports as a1, airports as a2 
+    where num_paths.airport1 = a1.airportid and
+    num_paths.airport2 = a2.airportid and 
+    a1.city = 'Albuquerque' and
+    a2.city = 'Chicago'), 0 
+) as count
 ; 
 
 -- 8 --
@@ -268,16 +281,24 @@ order by a1.city, a2.city
 ; 
 
 -- 9 --
-with delays(airportid, day, delay) as (
+with recursive delays(airportid, day, delay) as (
     select flights.originairportid, flights.dayofmonth, sum(flights.arrivaldelay) + sum(flights.departuredelay) from 
     flights
     group by flights.originairportid, flights.dayofmonth
+), 
+day(day) as (
+    select 1
+    union
+    select day + 1 from day where day <= 30
 )
-select delays.day from 
-delays, airports
-where airports.airportid = delays.airportid and
-airports.city = 'Albuquerque'
-order by delays.delay, delays.day
+select day.day, coalesce(
+    (select delays.delay from 
+    delays, airports
+    where airports.airportid = delays.airportid and
+    airports.city = 'Albuquerque' and
+    delays.day = day.day), 0) as delay
+from day
+order by delay, day.day
 ;
 
 -- 10 --
@@ -287,6 +308,12 @@ with num_cities(num_cities) as (
     where 
     airports.state = 'New York'
 ),
+cities(city) as (
+    select airports.city from
+    airports 
+    where 
+    airports.state = 'New York'
+), 
 num_cities_covered(city, num_cities) as (
     select a1.city, count(distinct a2.city) from 
     flights, airports as a1, airports as a2
@@ -297,9 +324,17 @@ num_cities_covered(city, num_cities) as (
     a2.state = 'New York'
     group by a1.city
 )
-select city from 
-num_cities_covered, num_cities
-where num_cities_covered.num_cities = num_cities.num_cities - 1
+select temp.city as name from
+    (select cities.city, coalesce(
+        (
+            select num_cities from num_cities_covered 
+            where num_cities_covered.city = cities.city
+        ), 0
+    ) as num_cities from 
+    cities
+    ) temp, num_cities
+where temp.num_cities = num_cities.num_cities - 1
+order by temp.city
 ;
 
 -- 11 --
@@ -358,6 +393,7 @@ with num_paths (author1, author2, count) as (
     with recursive paths(author1, author2, paths, last_gender) as (
             select author1, author2, array[author1, author2], null from
             edge_authors
+            where author2 = 2826
         union 
             select edge_authors.author1, paths.author2, 
             array[edge_authors.author1] || paths.paths, a2.gender
