@@ -691,7 +691,7 @@ a2.authorid = 321
 ;
 
 -- 21 --
-with connected_components_conf(conference, count) as (
+with connected_components_conf(conferencename, count) as (
     with reachable_list(authorid, conference, list) as (
         with recursive paths(author1, author2, conference) as (
                 select author1, author2, conference
@@ -716,11 +716,11 @@ with connected_components_conf(conference, count) as (
     group by conference
 )
 select * from connected_components_conf
-order by count desc, conference
+order by count desc, conferencename
 ;
 
 -- 22 --
-with connected_components_conf(conference, count) as (
+with connected_components_conf(conferencename, count) as (
     with reachable_list(authorid, conference, list) as (
         with recursive paths(author1, author2, conference) as (
                 select author1, author2, conference
@@ -745,7 +745,7 @@ with connected_components_conf(conference, count) as (
     ) temp
 )
 select * from connected_components_conf
-order by count, conference
+order by count, conferencename
 ;
 
 -- CLEANUP --
